@@ -6,9 +6,9 @@ require('dotenv').config();
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // This allows the server to read the incoming password
 
-// Setup Multer to handle file uploads (saves temporarily to an 'uploads' folder)
+// Setup Multer to handle file uploads
 const upload = multer({ dest: 'uploads/' });
 
 // Connect to MongoDB Atlas
@@ -16,7 +16,7 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ Connected to MongoDB Atlas"))
     .catch(err => console.log("❌ MongoDB Connection Error:", err));
 
-// Define what a customer order looks like in the database
+// Database Schema for Orders
 const OrderSchema = new mongoose.Schema({
     infill: String,
     material: String,
@@ -28,7 +28,7 @@ const OrderSchema = new mongoose.Schema({
 
 const Order = mongoose.model('Order', OrderSchema);
 
-// API Route: Receive customer order from the frontend
+// API Route: Receive customer order
 app.post('/api/orders', upload.single('modelFile'), async (req, res) => {
     try {
         const newOrder = new Order({
@@ -49,7 +49,19 @@ app.post('/api/orders', upload.single('modelFile'), async (req, res) => {
     }
 });
 
-// Health check route for Railway deployment
+// API Route: Verify Admin Password securely
+app.post('/api/admin/login', (req, res) => {
+    const userPassword = req.body.password;
+    
+    // Checks against the custom password you create in Railway Variables
+    if (userPassword === process.env.ADMIN_PASSWORD) {
+        res.status(200).json({ success: true, message: "Access Granted" });
+    } else {
+        res.status(401).json({ success: false, message: "Access Denied" });
+    }
+});
+
+// Health check route
 app.get('/', (req, res) => res.send("C & A Backend is Live"));
 
 const PORT = process.env.PORT || 5000;
