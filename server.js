@@ -3,8 +3,8 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const cloudinary = require('cloudinary').v2; // <-- New Cloudinary Package
-const fs = require('fs'); // To delete the temporary local file after upload
+const cloudinary = require('cloudinary').v2;
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
@@ -21,23 +21,23 @@ cloudinary.config({
 // Setup Multer to temporarily save files before sending to Cloudinary
 const upload = multer({ dest: 'uploads/' });
 
-// Connect to MongoDB
+// Connect to MongoDB Atlas
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("✅ Connected to MongoDB Atlas"))
     .catch(err => console.log("❌ MongoDB Connection Error:", err));
 
-// Updated Database Schema (Now includes the Cloudinary Download URL)
+// Database Schema for Customer Orders
 const OrderSchema = new mongoose.Schema({
     infill: String,
     material: String,
     color: String,
     originalFileName: String,
-    fileUrl: String, // <-- Link to download the 3D model
+    fileUrl: String, 
     orderDate: { type: Date, default: Date.now }
 });
 const Order = mongoose.model('Order', OrderSchema);
 
-// Existing Installer Schema
+// Database Schema for Hosted Setup Installers
 const InstallerSchema = new mongoose.Schema({
     originalFileName: String,
     path: String,
@@ -45,16 +45,18 @@ const InstallerSchema = new mongoose.Schema({
 });
 const Installer = mongoose.model('Installer', InstallerSchema);
 
-// API Route: Receive customer order & Upload to Cloudinary
+// API Route: Receive customer order & Upload to Cloudinary (FIXED EXTENSION)
 app.post('/api/orders', upload.single('modelFile'), async (req, res) => {
     try {
         let fileDownloadUrl = "No file attached";
 
         if (req.file) {
-            // Upload the file to Cloudinary as a 'raw' file (required for .stl and .obj)
+            // Upload the file to Cloudinary keeping the original file name and extension
             const cloudResult = await cloudinary.uploader.upload(req.file.path, {
                 resource_type: "raw",
-                folder: "CA_3D_Orders"
+                folder: "CA_3D_Orders",
+                // THIS FIXES THE DOWNLOAD ISSUE:
+                public_id: Date.now() + "_" + req.file.originalname 
             });
             fileDownloadUrl = cloudResult.secure_url;
 
@@ -78,10 +80,9 @@ app.post('/api/orders', upload.single('modelFile'), async (req, res) => {
     }
 });
 
-// NEW API Route: Get all orders for the Admin Dashboard
+// API Route: Get all orders for the Admin Dashboard
 app.get('/api/orders', async (req, res) => {
     try {
-        // Find all orders and sort by newest first
         const orders = await Order.find().sort({ orderDate: -1 });
         res.status(200).json(orders);
     } catch (error) {
@@ -89,7 +90,7 @@ app.get('/api/orders', async (req, res) => {
     }
 });
 
-// Admin Login
+// API Route: Verify Admin Password securely
 app.post('/api/admin/login', (req, res) => {
     const userPassword = req.body.password;
     if (userPassword === process.env.ADMIN_PASSWORD) {
@@ -99,7 +100,7 @@ app.post('/api/admin/login', (req, res) => {
     }
 });
 
-// Desktop Installer routes
+// API Route: Upload Desktop Installer
 app.post('/api/admin/installer', upload.single('setupFile'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -111,6 +112,8 @@ app.post('/api/admin/installer', upload.single('setupFile'), async (req, res) =>
         res.status(500).json({ error: "Failed to upload installer" });
     }
 });
+
+// API Route: Download Desktop Installer
 app.get('/api/installer/download', async (req, res) => {
     try {
         const latest = await Installer.findOne().sort({ uploadDate: -1 });
